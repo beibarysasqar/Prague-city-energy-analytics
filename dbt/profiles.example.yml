@@ -1,0 +1,20 @@
+# Copy to dbt/profiles.yml (`make profiles`). No secrets here: everything comes from env vars.
+prague:
+  target: "{{ env_var('DBT_TARGET', '') or 'dev' }}"
+  outputs:
+    dev:
+      type: duckdb
+      # Path is relative to the dbt/ directory (dbt is run from there)
+      path: "{{ env_var('DUCKDB_PATH', '') or '../data/warehouse.duckdb' }}"
+      threads: 4
+
+    prod:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE') }}"
+      schema: analytics
+      threads: 8
