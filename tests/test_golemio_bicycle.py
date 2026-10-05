@@ -9,8 +9,8 @@ import responses
 from responses import matchers
 
 from extract import common
-from extract.common import MissingSecretError, build_session, get_last_loaded
-from extract.golemio import RateLimiter, day_bounds
+from extract.common import MissingSecretError, RateLimiter, build_session, get_last_loaded
+from extract.golemio import day_bounds
 from extract.golemio_bicycle import (
     BASE_URL,
     COUNTERS_SOURCE,

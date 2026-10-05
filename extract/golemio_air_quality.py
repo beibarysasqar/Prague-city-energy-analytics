@@ -26,7 +26,6 @@ from extract.golemio import (
     PAGE_LIMIT,
     build_golemio_session,
     build_limiter,
-    day_bounds,  # noqa: F401  (re-exported for callers/tests)
     fetch_day,
     parse_features,
     to_raw_row,

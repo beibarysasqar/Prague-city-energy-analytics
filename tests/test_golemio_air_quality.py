@@ -10,11 +10,11 @@ from responses import matchers
 
 from extract import common
 from extract.common import MissingSecretError, RateLimiter, build_session, get_last_loaded
+from extract.golemio import day_bounds
 from extract.golemio_air_quality import (
     BASE_URL,
     HISTORY_SOURCE,
     STATIONS_SOURCE,
-    day_bounds,
     fetch_history_day,
     parse_history,
     parse_stations,
