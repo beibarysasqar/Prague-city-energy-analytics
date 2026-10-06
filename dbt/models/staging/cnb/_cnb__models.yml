@@ -1,0 +1,32 @@
+models:
+  - name: stg_cnb__fx_rates_daily
+    description: >
+      ČNB official FX rates, one row per calendar day x currency, normalised to CZK per 1 unit.
+      Weekends/holidays carry the last business day's rate (`rate_date`), as published by ČNB;
+      calendar days missing from bronze are forward-filled (`is_forward_filled`). EUR must be present
+      for every day (singular test `assert_eur_rate_for_every_calendar_day`).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [calendar_date, currency_code]
+    columns:
+      - name: calendar_date
+        data_tests: [not_null]
+      - name: currency_code
+        description: ISO currency code.
+        data_tests: [not_null]
+      - name: rate_date
+        description: Business day the rate was fixed for (<= calendar_date).
+        data_tests: [not_null]
+      - name: rate_czk_per_unit
+        description: CZK per 1 unit of the currency (`rate / amount`).
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+      - name: quoted_amount
+        description: Units the original rate was quoted for (1, 100, 1000).
+      - name: is_forward_filled
+        data_tests: [not_null]

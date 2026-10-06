@@ -1,0 +1,169 @@
+models:
+  - name: stg_golemio__air_quality_stations
+    description: >
+      Current air quality station list (latest bronze snapshot). Source of the SCD2 snapshot
+      `snap_golemio__air_quality_stations`. Four stations (AHOLA, ALERA, ARERA, ASROA) are listed but
+      stopped publishing measurements on 2026-08-12.
+    columns:
+      - name: station_id
+        description: ČHMÚ station code.
+        data_tests: [unique, not_null]
+      - name: station_name
+        data_tests: [not_null]
+      - name: district_slug
+        description: City district slug, joins to `stg_golemio__city_districts`.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_golemio__city_districts')
+                field: district_slug
+      - name: latitude
+        data_tests: [not_null]
+      - name: longitude
+        data_tests: [not_null]
+      - name: snapshot_date
+        description: Bronze partition (UTC run date) the row comes from.
+
+  - name: stg_golemio__air_quality_measurements
+    description: >
+      Air quality measurements, one row per station x measured hour x pollutant. The API publishes
+      10–50 minutes after the hour (`published_ts_utc`), so a publication is assigned to the hour that
+      ended at date_trunc('hour', published_ts_utc). Re-publications of the same hour replace earlier
+      ones. Hours can be missing (e.g. 00–02 UTC before 2026-08-12).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [station_id, measured_hour_start_ts_utc, pollutant]
+    columns:
+      - name: station_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_golemio__air_quality_stations')
+                field: station_id
+      - name: measured_hour_start_ts_utc
+        description: Start of the measured hour (UTC).
+        data_tests: [not_null]
+      - name: pollutant
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [CO, NO2, NOx, O3, O3_Model, PM10, PM2_5, SO2]
+      - name: value_ugm3
+        description: Concentration in µg/m³ (all components, incl. CO, per `/componenttypes`).
+        data_tests: [not_null]
+      - name: averaging_hours
+        description: >
+          Averaging window of the value: 3-hour running averages until 2026-08-12 ~06:00 UTC, 1-hour
+          values after (source switch, together with the HH:10 -> HH:50 publication change).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 3]
+                quote: false
+      - name: aq_hourly_index
+        description: ČHMÚ hourly air quality index code (0 = incomplete data, -1 = not determined).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["-1", "0", 1A, 1B, 2A, 2B, 3A, 3B]
+      - name: measured_hour_start_local
+        description: Start of the measured hour in Europe/Prague local time (derived, naive timestamp).
+      - name: published_ts_utc
+        data_tests: [not_null]
+
+  - name: stg_golemio__city_districts
+    description: Prague city districts (latest bronze snapshot) with boundary polygons as GeoJSON.
+    columns:
+      - name: district_id
+        data_tests: [unique, not_null]
+      - name: district_slug
+        data_tests: [unique, not_null]
+      - name: district_name
+        data_tests: [not_null]
+      - name: geometry_geojson
+        description: GeoJSON Polygon of the district boundary.
+        data_tests: [not_null]
+
+  - name: stg_golemio__bicycle_counters
+    description: >
+      Bicycle counters (latest bronze snapshot). The API has no district for counters; `district_slug`
+      is derived by point-in-polygon against the district boundaries (`st_contains_geojson` macro).
+    columns:
+      - name: counter_id
+        data_tests: [unique, not_null]
+      - name: counter_name
+        data_tests: [not_null]
+      - name: district_slug
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_golemio__city_districts')
+                field: district_slug
+      - name: latitude
+        data_tests: [not_null]
+      - name: longitude
+        data_tests: [not_null]
+
+  - name: stg_golemio__bicycle_counter_directions
+    description: >
+      Directions listed in the counter catalogue. The catalogue has a `{"id": null}` placeholder for
+      camea-BC_PN-VYBR (cycle path) although that counter reports detections for camea-PN-VY /
+      camea-PN-BR (same ids as the road counter camea-BC_PN-VYBR2); placeholders are dropped, the
+      observed directions are completed in gold.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [counter_id, direction_id]
+    columns:
+      - name: counter_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_golemio__bicycle_counters')
+                field: counter_id
+      - name: direction_id
+        description: Direction id; not unique across counters.
+        data_tests: [not_null]
+      - name: direction_name
+        data_tests: [not_null]
+
+  - name: stg_golemio__bicycle_detections
+    description: >
+      5-minute bicycle (and for some counters pedestrian) counts per counter direction.
+      Key = (counter_id, direction_id, interval_start_ts_utc). `bike_count` is null when the counter
+      delivered no value for the slot.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [counter_id, direction_id, interval_start_ts_utc]
+    columns:
+      - name: counter_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_golemio__bicycle_counters')
+                field: counter_id
+      - name: direction_id
+        data_tests: [not_null]
+      - name: interval_start_ts_utc
+        data_tests: [not_null]
+      - name: interval_end_ts_utc
+        data_tests: [not_null]
+      - name: bike_count
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: pedestrian_count
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0

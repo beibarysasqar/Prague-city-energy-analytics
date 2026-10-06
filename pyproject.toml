@@ -1,11 +1,21 @@
 [project]
 name = "prague-city-energy-analytics"
 version = "0.1.0"
+description = "ELT pipeline on Prague open data: air quality, electricity prices, weather and bike traffic (uv, DuckDB, dbt, Streamlit)."
 requires-python = ">=3.12"
 dependencies = [
+    "beautifulsoup4>=4.15.0",
     "dbt-core>=1.12.5",
     "dbt-duckdb>=1.11.0",
+    "duckdb>=1.5.6",
+    "entsoe-py>=0.8.1",
+    "pandas>=3.0.6",
+    "plotly>=7.1.0",
+    "pyarrow>=25.0.1",
     "python-dotenv>=1.2.4",
+    "requests>=2.34.2",
+    "streamlit>=1.65.0",
+    "tenacity>=9.1.4",
 ]
 
 [project.optional-dependencies]
@@ -16,8 +26,10 @@ snowflake = [
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "responses>=0.26.3",
     "ruff>=0.16.10",
     "sqlfluff>=4.4.0",
+    "sqlfluff-templater-dbt>=4.4.0",
 ]
 
 [tool.ruff]
@@ -30,3 +42,4 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = ["ignore::bs4.XMLParsedAsHTMLWarning"]

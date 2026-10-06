@@ -1,0 +1,25 @@
+sources:
+  - name: cnb
+    description: >
+      ČNB public FX API (official daily rates), `extract/cnb_fx.py`. One partition per requested
+      calendar day; weekends/holidays repeat the last business day's table (`validFor`).
+    config:
+      loaded_at_field: _loaded_at
+      meta:
+        # Bronze root is relative to dbt/; override with BRONZE_ROOT (e.g. absolute path).
+        external_location: >-
+          read_parquet('{{ env_var("BRONZE_ROOT", "../data/bronze") }}/{name}/*/*.parquet', hive_partitioning = true)
+    tables:
+      - name: cnb_fx_daily
+        description: CZK per `amount` units of each currency.
+        config:
+          freshness:
+            # No new rates over weekends/holidays.
+            warn_after: {count: 4, period: day}
+            error_after: {count: 7, period: day}
+        columns:
+          - name: currencyCode
+            data_tests: [not_null]
+          - name: validFor
+            description: Business day the rate is valid for.
+            data_tests: [not_null]

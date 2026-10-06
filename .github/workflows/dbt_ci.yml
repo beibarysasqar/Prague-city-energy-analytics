@@ -1,0 +1,69 @@
+name: dbt CI
+
+# Every PR: build the whole pipeline from scratch on a 7-day window and run all checks.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dbt-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOLEMIO_API_KEY: ${{ secrets.GOLEMIO_API_KEY }}
+  ENTSOE_API_KEY: ${{ secrets.ENTSOE_API_KEY }}
+  DBT_TARGET: dev
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.2.0  # no floating major tags since v8
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Check secrets
+        # Secrets are not available to PRs from forks.
+        run: |
+          missing=""
+          [ -n "$GOLEMIO_API_KEY" ] || missing="$missing GOLEMIO_API_KEY"
+          [ -n "$ENTSOE_API_KEY" ] || missing="$missing ENTSOE_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing (Settings > Secrets and variables > Actions)"
+            exit 1
+          fi
+
+      - name: Extract last 7 days into bronze
+        run: uv run python -m extract.run --days 7
+
+      - name: dbt deps, source freshness, build
+        run: make dbt
+
+      - name: Lint (ruff + sqlfluff)
+        run: make lint
+
+      - name: Tests
+        run: make test
+
+      - name: Upload dbt artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dbt-artifacts
+          path: |
+            dbt/target/run_results.json
+            dbt/target/manifest.json
+            dbt/target/sources.json
+            dbt/logs/
+          if-no-files-found: ignore
+          retention-days: 7

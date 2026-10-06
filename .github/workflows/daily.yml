@@ -1,0 +1,73 @@
+name: Daily pipeline
+
+# Incremental daily load. GitHub-hosted runners start empty, so data/ (bronze Parquet, the extractor
+# state and the DuckDB warehouse incl. the SCD2 station snapshot) is carried between runs in the
+# Actions cache; a cache miss falls back to the first-run default (90 days).
+on:
+  schedule:
+    # 13:30 UTC: after the ČNB daily rates (~12:30 UTC) and the next-day ENTSO-E prices (~11 UTC)
+    - cron: "30 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-pipeline
+  cancel-in-progress: false
+
+env:
+  GOLEMIO_API_KEY: ${{ secrets.GOLEMIO_API_KEY }}
+  ENTSOE_API_KEY: ${{ secrets.ENTSOE_API_KEY }}
+  DBT_TARGET: dev
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.2.0  # no floating major tags since v8
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Restore data/ from the previous run
+        uses: actions/cache/restore@v6
+        with:
+          path: data/
+          key: data-${{ github.run_id }}
+          restore-keys: data-
+
+      - name: Extract (incremental from data/bronze/_state.json)
+        run: uv run python -m extract.run
+
+      - name: dbt deps, source freshness, build
+        run: make dbt
+
+      - name: Profile gold tables
+        run: make profile
+
+      - name: Save data/ for the next run
+        if: success()
+        uses: actions/cache/save@v6
+        with:
+          path: data/
+          key: data-${{ github.run_id }}
+
+      - name: Upload reports and warehouse
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: daily-${{ github.run_id }}
+          path: |
+            profiling/reports/
+            dbt/target/run_results.json
+            dbt/target/sources.json
+            data/warehouse.duckdb
+          if-no-files-found: ignore
+          retention-days: 7

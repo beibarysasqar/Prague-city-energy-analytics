@@ -1,0 +1,38 @@
+[
+ {
+  "id": "camea-PN-VY",
+  "value": 0,
+  "value_pedestrians": null,
+  "measured_from": "2026-10-02T12:00:00.000Z",
+  "measured_to": "2026-10-02T12:05:00.000Z",
+  "locations_id": "camea-BC_PN-VYBR2",
+  "measurement_count": 1
+ },
+ {
+  "id": "camea-PN-VY",
+  "value": 2,
+  "value_pedestrians": 2,
+  "measured_from": "2026-10-02T12:00:00.000Z",
+  "measured_to": "2026-10-02T12:05:00.000Z",
+  "locations_id": "camea-BC_PN-VYBR",
+  "measurement_count": 1
+ },
+ {
+  "id": "camea-RN-KA",
+  "value": null,
+  "value_pedestrians": null,
+  "measured_from": "2026-10-02T12:00:00.000Z",
+  "measured_to": "2026-10-02T12:05:00.000Z",
+  "locations_id": "camea-BC_RN-JK",
+  "measurement_count": 1
+ },
+ {
+  "id": "camea-PN-BR",
+  "value": 2,
+  "value_pedestrians": 4,
+  "measured_from": "2026-10-02T12:00:00.000Z",
+  "measured_to": "2026-10-02T12:05:00.000Z",
+  "locations_id": "camea-BC_PN-VYBR",
+  "measurement_count": 1
+ }
+]

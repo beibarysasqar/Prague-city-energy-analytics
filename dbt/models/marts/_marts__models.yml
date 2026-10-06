@@ -1,0 +1,274 @@
+models:
+  # ------------------------------------------------------------------ dimensions
+  - name: dim_date
+    description: Calendar 2025–2027 with ISO week, weekend and Czech public holiday flags.
+    columns:
+      - name: date_key
+        description: YYYYMMDD integer key.
+        data_tests: [unique, not_null]
+      - name: date_day
+        data_tests: [unique, not_null]
+      - name: is_cz_public_holiday
+        data_tests: [not_null]
+      - name: is_working_day
+        description: Not a weekend and not a Czech public holiday.
+
+  - name: dim_district
+    description: Prague city districts plus an `Unknown` member (`district_key = '-1'`).
+    columns:
+      - name: district_key
+        description: Surrogate key (hash of the slug); '-1' = unknown.
+        data_tests: [unique, not_null]
+      - name: district_slug
+        data_tests: [unique, not_null]
+      - name: district_name
+        data_tests: [not_null]
+
+  - name: dim_station
+    description: >
+      SCD2 air quality station dimension built from `snap_golemio__air_quality_stations`, one row per
+      station version. The first version of every station is valid from 1900-01-01 (the snapshot only
+      started recently); open versions end at 9999-12-31. Facts look up the version valid at their hour.
+    columns:
+      - name: station_key
+        description: Version key (`dbt_scd_id`).
+        data_tests: [unique, not_null]
+      - name: station_id
+        data_tests: [not_null]
+      - name: district_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_district')
+                field: district_key
+      - name: valid_from_ts_utc
+        data_tests: [not_null]
+      - name: valid_to_ts_utc
+        data_tests: [not_null]
+      - name: is_current
+        data_tests: [not_null]
+
+  - name: dim_bike_counter
+    description: Bicycle counters with the district derived by point-in-polygon.
+    columns:
+      - name: counter_key
+        data_tests: [unique, not_null]
+      - name: counter_id
+        data_tests: [unique, not_null]
+      - name: district_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_district')
+                field: district_key
+
+  # ------------------------------------------------------------------ facts
+  - name: fact_air_quality_hourly
+    description: >
+      Air quality per station x UTC hour x pollutant (incremental, delete+insert, 3-day lookback).
+      Source hours have real gaps (outages, 00–02 UTC before 2026-08-12), so the gap test only warns.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [station_id, hour_start_ts_utc, pollutant]
+    columns:
+      - name: station_id
+        data_tests: [not_null]
+      - name: hour_start_ts_utc
+        data_tests:
+          - not_null
+          - no_time_gaps:
+              arguments:
+                partition_by: [station_id]
+                datepart: hour
+              config:
+                severity: warn
+      - name: pollutant
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [CO, NO2, NOx, O3, O3_Model, PM10, PM2_5, SO2]
+      - name: station_key
+        description: Station version valid at the measured hour (SCD2 lookup).
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_station')
+                field: station_key
+      - name: district_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_district')
+                field: district_key
+      - name: date_key
+        description: Prague local date of the hour.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: value_ugm3
+        data_tests: [not_null, non_negative]
+
+  - name: fact_weather_hourly
+    description: >
+      Weather per AQ station x UTC hour (Open-Meteo). Added to the original star schema because the
+      weather drivers (wind, rain, temperature) are needed to explain air pollution.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [station_id, hour_start_ts_utc]
+    columns:
+      - name: hour_start_ts_utc
+        data_tests:
+          - not_null
+          - no_time_gaps:
+              arguments:
+                partition_by: [station_id]
+                datepart: hour
+      - name: station_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_station')
+                field: station_key
+      - name: district_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_district')
+                field: district_key
+      - name: date_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: precipitation_mm
+        data_tests: [non_negative]
+      - name: wind_speed_ms
+        data_tests: [non_negative]
+
+  - name: fact_energy_price_hourly
+    description: >
+      CZ day-ahead price and actual load per UTC hour. `price_czk_mwh` uses the ČNB EUR rate of the
+      Prague calendar date (`is_eur_rate_estimated` = latest known rate for not-yet-fixed days).
+      Prices can be negative, so `non_negative` is deliberately not applied to them.
+    columns:
+      - name: hour_start_ts_utc
+        data_tests:
+          - unique
+          - not_null
+          - no_time_gaps:
+              arguments:
+                datepart: hour
+      - name: date_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: price_eur_mwh
+        data_tests: [not_null]
+      - name: eur_czk_rate
+        data_tests: [not_null, non_negative]
+      - name: price_czk_mwh
+        data_tests: [not_null]
+      - name: load_mw
+        description: Null for hours whose load is not published yet.
+        data_tests: [non_negative]
+
+  - name: fact_bike_traffic_daily
+    description: >
+      Bicycle and pedestrian counts per counter direction and Prague calendar day (incremental,
+      3-day lookback). `is_complete_day` = all 5-minute slots present (288; 276/300 on DST days);
+      use complete days for trends. Directions of camea-BC_PN-VYBR are inferred (`is_direction_inferred`).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [counter_id, direction_id, local_date]
+    columns:
+      - name: counter_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_bike_counter')
+                field: counter_key
+      - name: district_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_district')
+                field: district_key
+      - name: date_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: direction_name
+        data_tests: [not_null]
+      - name: bike_count
+        data_tests: [non_negative]
+      - name: pedestrian_count
+        data_tests: [non_negative]
+      - name: expected_slots
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [276, 288, 300]
+                quote: false
+
+  # ------------------------------------------------------------------ marts
+  - name: mart_air_vs_energy_daily
+    description: >
+      District x Prague calendar day: mean PM2.5 / PM10 / NO2, weather and the city-wide day-ahead
+      price and load. Input for the price-vs-pollution and correlation views. Before 2026-08-12 the
+      source delivers 3-hour running averages, after that 1-hour values (`aq_averaging_hours`).
+      Correlation is not causation: weather drives both pollution and demand.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [district_key, date_key]
+    columns:
+      - name: district_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_district')
+                field: district_key
+      - name: date_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: avg_pm2_5_ugm3
+        data_tests: [non_negative]
+      - name: avg_pm10_ugm3
+        data_tests: [non_negative]
+      - name: n_aq_stations
+        data_tests: [not_null]
+      - name: aq_averaging_hours
+        description: Averaging window of the underlying AQ values (3 before 2026-08-12, then 1).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1, 3]
+                quote: false

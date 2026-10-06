@@ -1,0 +1,80 @@
+sources:
+  - name: golemio
+    description: >
+      Golemio, the Prague data platform (https://api.golemio.cz). Raw API records landed by
+      `extract/golemio_*.py` into bronze Parquet, one partition (`load_date`) per UTC day or per
+      snapshot run. Nested objects are JSON strings.
+    config:
+      loaded_at_field: _loaded_at
+      meta:
+        # Bronze root is relative to dbt/; override with BRONZE_ROOT (e.g. absolute path).
+        external_location: >-
+          read_parquet('{{ env_var("BRONZE_ROOT", "../data/bronze") }}/{name}/*/*.parquet', hive_partitioning = true)
+    tables:
+      - name: golemio_air_quality_stations
+        description: Snapshot of the air quality station list (GeoJSON features), one partition per run.
+        config:
+          freshness:
+            warn_after: {count: 2, period: day}
+            error_after: {count: 7, period: day}
+        columns:
+          - name: id
+            description: Station code (e.g. ABREA).
+            data_tests: [not_null]
+          - name: district
+            description: City district slug.
+          - name: geometry
+            description: GeoJSON Point, coordinates [lon, lat].
+
+      - name: golemio_air_quality_history
+        description: >
+          Hourly air quality publications. `updated_at` is the publication time (HH:10 until
+          ~2026-08-12, HH:50 after, occasional HH:40 re-publications), `measurement` is a JSON object
+          with `AQ_hourly_index` and `components[{type, averaged_time{averaged_hours, value}}]`.
+        config:
+          freshness:
+            warn_after: {count: 6, period: hour}
+            error_after: {count: 24, period: hour}
+        columns:
+          - name: id
+            data_tests: [not_null]
+          - name: updated_at
+            data_tests: [not_null]
+
+      - name: golemio_bicycle_counters
+        description: Snapshot of bicycle counters with their directions (JSON array), one partition per run.
+        config:
+          freshness:
+            warn_after: {count: 2, period: day}
+            error_after: {count: 7, period: day}
+        columns:
+          - name: id
+            data_tests: [not_null]
+
+      - name: golemio_bicycle_detections
+        description: >
+          5-minute bicycle/pedestrian counts per direction. The direction `id` is not unique on its own;
+          the natural key is (locations_id, id, measured_from).
+        config:
+          freshness:
+            warn_after: {count: 12, period: hour}
+            error_after: {count: 48, period: hour}
+        columns:
+          - name: locations_id
+            description: Counter id.
+            data_tests: [not_null]
+          - name: id
+            description: Direction id.
+            data_tests: [not_null]
+          - name: measured_from
+            data_tests: [not_null]
+
+      - name: golemio_city_districts
+        description: Snapshot of Prague city districts with boundary polygons (GeoJSON), one partition per run.
+        config:
+          freshness:
+            warn_after: {count: 2, period: day}
+            error_after: {count: 7, period: day}
+        columns:
+          - name: slug
+            data_tests: [not_null]

@@ -1,0 +1,17 @@
+snapshots:
+  - name: snap_golemio__air_quality_stations
+    description: >
+      SCD2 history of the air quality station dimension (check strategy on name, district and
+      coordinates). `dbt_valid_from`/`dbt_valid_to` bound each version; stations that disappear from the
+      source are closed (`hard_deletes: invalidate`).
+    relation: ref('stg_golemio__air_quality_stations')
+    config:
+      unique_key: station_id
+      strategy: check
+      check_cols: [station_name, district_slug, latitude, longitude]
+      hard_deletes: invalidate
+    columns:
+      - name: station_id
+        data_tests: [not_null]
+      - name: dbt_scd_id
+        data_tests: [unique, not_null]

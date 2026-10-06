@@ -1,0 +1,7 @@
+{
+    "description": "ValidationErrorCode: typeMismatch;  Field: date; Value: 2026-13-45",
+    "errorCode": "VALIDATION_ERROR",
+    "happenedAt": "2026-10-05 02:48:02",
+    "endPoint": "/cnbapi/exrates/daily?date=2026-13-45&lang=EN",
+    "messageId": "3flztMemGuII"
+}

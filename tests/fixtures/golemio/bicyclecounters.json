@@ -1,0 +1,83 @@
+{
+ "features": [
+  {
+   "geometry": {
+    "coordinates": [
+     14.3986383,
+     50.0718897
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "directions": [
+     {
+      "id": "camea-BC_AL-ST",
+      "name": "Štefánikova (centrum)"
+     },
+     {
+      "id": "camea-BC_AL-PL",
+      "name": "Plzeňská (z centra)"
+     }
+    ],
+    "id": "camea-BC_AL-STPL",
+    "name": "Anděl (Plzeňská)",
+    "route": "A14",
+    "updated_at": "2026-10-05T00:55:00.738Z"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     14.3785794,
+     50.0793736
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "directions": [
+     {
+      "id": "camea-BC_AT-ST",
+      "name": "Strahov"
+     },
+     {
+      "id": "camea-BC_AT-LA",
+      "name": "Ladronka"
+     }
+    ],
+    "id": "camea-BC_AT-STLA",
+    "name": "Atletická",
+    "route": "A140",
+    "updated_at": "2026-10-05T00:55:00.738Z"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     14.407247,
+     50.0420991
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "directions": [
+     {
+      "id": "camea-BC_BS-ZL",
+      "name": "Zlíchov"
+     },
+     {
+      "id": "camea-BC_BS-BM",
+      "name": "Barrandovský most"
+     }
+    ],
+    "id": "camea-BC_BS-BMZL",
+    "name": "Barrandovský most",
+    "route": "A 12",
+    "updated_at": "2026-10-05T00:55:00.738Z"
+   },
+   "type": "Feature"
+  }
+ ],
+ "type": "FeatureCollection"
+}

@@ -1,0 +1,92 @@
+[
+    {
+        "id": "ABREA",
+        "measurement": {
+            "AQ_hourly_index": "1B",
+            "components": [
+                {
+                    "averaged_time": {
+                        "averaged_hours": "1",
+                        "value": 28.5
+                    },
+                    "type": "NOx"
+                },
+                {
+                    "averaged_time": {
+                        "averaged_hours": "1",
+                        "value": 26.8
+                    },
+                    "type": "NO2"
+                },
+                {
+                    "averaged_time": {
+                        "averaged_hours": "1",
+                        "value": 29.2
+                    },
+                    "type": "PM10"
+                }
+            ]
+        },
+        "updated_at": "2026-10-04T01:50:01.606Z"
+    },
+    {
+        "id": "ABREA",
+        "measurement": {
+            "AQ_hourly_index": "1B",
+            "components": [
+                {
+                    "averaged_time": {
+                        "averaged_hours": "1",
+                        "value": 32.1
+                    },
+                    "type": "NOx"
+                },
+                {
+                    "averaged_time": {
+                        "averaged_hours": "1",
+                        "value": 30.4
+                    },
+                    "type": "NO2"
+                },
+                {
+                    "averaged_time": {
+                        "averaged_hours": "1",
+                        "value": 38.9
+                    },
+                    "type": "PM10"
+                }
+            ]
+        },
+        "updated_at": "2026-10-04T02:50:01.260Z"
+    },
+    {
+        "id": "ABREA",
+        "measurement": {
+            "AQ_hourly_index": "1B",
+            "components": [
+                {
+                    "averaged_time": {
+                        "averaged_hours": "1",
+                        "value": 31.6
+                    },
+                    "type": "NOx"
+                },
+                {
+                    "averaged_time": {
+                        "averaged_hours": "1",
+                        "value": 29.5
+                    },
+                    "type": "NO2"
+                },
+                {
+                    "averaged_time": {
+                        "averaged_hours": "1",
+                        "value": 29.3
+                    },
+                    "type": "PM10"
+                }
+            ]
+        },
+        "updated_at": "2026-10-04T03:50:01.640Z"
+    }
+]

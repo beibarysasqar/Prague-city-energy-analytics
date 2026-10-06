@@ -1,0 +1,50 @@
+models:
+  - name: stg_open_meteo__weather_hourly
+    description: >
+      Hourly weather per air quality station (Open-Meteo archive, model grid cell nearest to the
+      station). Timestamps are UTC hour starts; recent days are re-loaded because they get revised.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [station_id, hour_start_ts_utc]
+    columns:
+      - name: station_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_golemio__air_quality_stations')
+                field: station_id
+      - name: hour_start_ts_utc
+        data_tests: [not_null]
+      - name: hour_start_local
+        description: Hour start in Europe/Prague local time (derived).
+      - name: temperature_c
+        description: Air temperature at 2 m (°C).
+      - name: relative_humidity_pct
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: precipitation_mm
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: wind_speed_kmh
+        description: Wind speed at 10 m as delivered (km/h).
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: wind_speed_ms
+        description: Wind speed at 10 m converted to m/s.
+      - name: wind_direction_deg
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 360
+      - name: grid_latitude
+        description: Latitude of the model grid cell (not the station).
