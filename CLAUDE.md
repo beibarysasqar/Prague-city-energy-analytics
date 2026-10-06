@@ -14,7 +14,9 @@ Author works on macOS in PyCharm. Communicate with me in Russian; code, comments
 - Warehouse: DuckDB (`data/warehouse.duckdb`) for dev; Snowflake as dbt target `prod` (profile only, no real deploy required)
 - Transformation: dbt-core + dbt-duckdb, `dbt_utils`
 - Dashboard: Streamlit + Plotly
-- Profiling: ydata-profiling (fallback: own script)
+- Profiling: ydata-profiling (fallback: own script). It requires pandas < 3, so `profiling/profile_gold.py` is a self-contained
+  PEP 723 script run with `uv run --script` (own pinned env incl. `setuptools<81` for `pkg_resources`); the project env stays on pandas 3.
+  `ydata_profiling` is deprecated upstream in favour of `fg-data-profiling` (same authors, also pandas < 3) — candidate for a later switch.
 - CI/orchestration: GitHub Actions (PR CI + daily cron). Airflow DAG only as a documented example, not run.
 - Lint: ruff (Python), sqlfluff (SQL, dialect duckdb)
 
@@ -105,11 +107,12 @@ uv run python -m extract.run                  # all sources, incremental
 cd dbt && uv run dbt deps
 uv run dbt source freshness && uv run dbt build   # build = seeds + models + snapshots + tests in DAG order
 uv run dbt docs generate && uv run dbt docs serve
+make profile  # ydata-profiling HTML per gold table + index.md → profiling/reports/ (not committed)
 uv run streamlit run app/streamlit_app.py
 make lint    # ruff + sqlfluff (dbt templater; needs dbt/profiles.yml, `dbt deps` and bronze data)
 uv run pytest
 ```
-A `Makefile` wraps these (`make extract`, `make dbt`, `make app`, `make lint`, `make test`).
+A `Makefile` wraps these (`make extract`, `make dbt`, `make profile`, `make app`, `make lint`, `make test`).
 
 ## Development phases (do them in order, one phase per session/PR)
 1. **Scaffold**: repo layout, `.gitignore`, `.env.example`, `Makefile`, dbt project init, `profiles.example.yml` (dev=duckdb, prod=snowflake via env vars).

@@ -6,7 +6,7 @@ DBT := cd dbt && uv run dbt
 # sqlfluff's dbt templater runs from the repo root, so DuckDB and bronze paths must be absolute.
 SQLFLUFF := DUCKDB_PATH=$(CURDIR)/data/warehouse.duckdb BRONZE_ROOT=$(CURDIR)/data/bronze uv run sqlfluff
 
-.PHONY: install profiles extract dbt debug docs app lint format test clean
+.PHONY: install profiles extract dbt debug docs profile app lint format test clean
 
 install:
 	uv sync
@@ -32,6 +32,10 @@ debug: profiles
 docs: profiles
 	$(DBT) docs generate
 	$(DBT) docs serve
+
+# ydata-profiling needs pandas < 3, so the script runs in its own env (PEP 723 metadata).
+profile:
+	uv run --script profiling/profile_gold.py
 
 app:
 	uv run streamlit run app/streamlit_app.py
