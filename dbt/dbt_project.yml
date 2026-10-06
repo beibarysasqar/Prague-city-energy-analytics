@@ -4,7 +4,6 @@ config-version: 2
 profile: prague
 
 model-paths: ["models"]
-analysis-paths: ["analyses"]
 test-paths: ["tests"]
 seed-paths: ["seeds"]
 macro-paths: ["macros"]
@@ -18,14 +17,16 @@ models:
   prague:
     staging:
       +schema: silver
-      +materialized: view
+      # Tables, not views: views would keep relative read_parquet() paths to bronze and break
+      # for any consumer not running from dbt/ (Streamlit, notebooks).
+      +materialized: table
     marts:
       +schema: gold
       +materialized: table
 
 snapshots:
   prague:
-    +target_schema: snapshots
+    +schema: snapshots
 
 seeds:
   prague:

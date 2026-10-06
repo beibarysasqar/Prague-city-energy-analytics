@@ -3,6 +3,8 @@
 export
 
 DBT := cd dbt && uv run dbt
+# sqlfluff's dbt templater runs from the repo root, so DuckDB and bronze paths must be absolute.
+SQLFLUFF := DUCKDB_PATH=$(CURDIR)/data/warehouse.duckdb BRONZE_ROOT=$(CURDIR)/data/bronze uv run sqlfluff
 
 .PHONY: install profiles extract dbt debug docs app lint format test clean
 
@@ -16,10 +18,10 @@ profiles:
 extract:
 	uv run python -m extract.run
 
+# `dbt build` runs seeds, models, snapshots and tests in DAG order (a separate `dbt snapshot`
+# before the build fails on a fresh database: the snapshot reads a staging model).
 dbt: profiles
 	$(DBT) deps
-	$(DBT) seed
-	$(DBT) snapshot
 	$(DBT) source freshness
 	$(DBT) build
 
@@ -34,15 +36,15 @@ docs: profiles
 app:
 	uv run streamlit run app/streamlit_app.py
 
-lint:
+lint: profiles
 	uv run ruff check .
 	uv run ruff format --check .
-	uv run sqlfluff lint dbt/models dbt/macros dbt/snapshots dbt/tests
+	$(SQLFLUFF) lint dbt/models dbt/tests
 
-format:
+format: profiles
 	uv run ruff check --fix .
 	uv run ruff format .
-	uv run sqlfluff fix dbt/models dbt/macros dbt/snapshots dbt/tests
+	$(SQLFLUFF) fix dbt/models dbt/tests
 
 test:
 	uv run pytest

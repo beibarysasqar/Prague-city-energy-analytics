@@ -1,0 +1,40 @@
+models:
+  - name: stg_entsoe__day_ahead_prices_hourly
+    description: >
+      CZ day-ahead prices averaged from 15-minute MTUs to UTC hours. Prices can be negative, so no
+      non-negativity check is applied.
+    columns:
+      - name: hour_start_ts_utc
+        data_tests: [unique, not_null]
+      - name: hour_start_local
+        description: Hour start in Europe/Prague local time (derived).
+      - name: price_eur_mwh
+        description: Mean of the 15-minute prices in the hour (EUR/MWh).
+        data_tests: [not_null]
+      - name: n_intervals
+        description: Number of 15-minute points in the hour (4 when complete).
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 4
+
+  - name: stg_entsoe__actual_load_hourly
+    description: CZ actual total load averaged from 15-minute points to UTC hours (MW).
+    columns:
+      - name: hour_start_ts_utc
+        data_tests: [unique, not_null]
+      - name: load_mw
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: n_intervals
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 4

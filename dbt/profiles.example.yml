@@ -7,6 +7,12 @@ prague:
       # Path is relative to the dbt/ directory (dbt is run from there)
       path: "{{ env_var('DUCKDB_PATH', '') or '../data/warehouse.duckdb' }}"
       threads: 4
+      extensions:
+        - json
+        - spatial
+      settings:
+        # date_trunc/casts on TIMESTAMPTZ use the session time zone: keep everything in UTC.
+        TimeZone: UTC
 
     prod:
       type: snowflake

@@ -88,6 +88,10 @@ Python extractors (incremental by date, retries, idempotent)
 - dbt naming: `stg_<source>__<entity>` (silver), `dim_*`, `fact_*`, `mart_*` (gold). Every model has a YAML entry with description and tests.
 - Gold facts are `incremental`, `incremental_strategy='delete+insert'`, with a 3-day lookback window for late-arriving data.
 - Sources read bronze Parquet via dbt-duckdb `external_location`; every source has `loaded_at_field: _loaded_at` and freshness thresholds.
+- Silver (`dbt/models/staging/<source>/`): staging models are materialized as **tables** (views would keep relative `read_parquet('../data/bronze/…')` paths and break outside `dbt/`). Bronze root defaults to `../data/bronze` (relative to `dbt/`), override with `BRONZE_ROOT`. The dev profile sets DuckDB `TimeZone: UTC` (date_trunc on TIMESTAMPTZ uses the session zone) and loads `json`, `spatial`.
+- Silver keys/decisions: AQ measurements = (station_id, measured_hour_start_ts_utc, pollutant), measured hour = hour ending at `date_trunc('hour', updated_at)` (assumption: published 10–50 min after the hour), latest re-publication wins; bicycle detections = (counter_id, direction_id, interval_start_ts_utc); counters → districts via `st_contains_geojson` macro (adapter.dispatch duckdb/snowflake); ENTSO-E 15 min → UTC hour averages with `n_intervals`; FX = calendar_date × currency, `rate_czk_per_unit = rate / amount`, `dbt_utils.date_spine` + forward-fill. JSON parsing/unnest in staging is DuckDB-specific (Snowflake would need FLATTEN).
+- Known source quirk: counter `camea-BC_PN-VYBR` (cycle path) has a `{"id": null}` direction in the catalogue but reports detections for `camea-PN-VY`/`camea-PN-BR` → complete the direction dimension in gold from observed detections.
+- SCD2: `snapshots/snap_golemio__air_quality_stations.yml` (YAML snapshot syntax, check strategy, `hard_deletes: invalidate`).
 - Required tests: unique / not_null / relationships / accepted_values, plus custom generic tests `non_negative` (e.g. PM2.5, prices may be negative! — do NOT apply to day-ahead price) and `no_time_gaps` (per station, hourly, on UTC).
 - Prefer cross-database macros (`dbt_utils`, `dbt.date_trunc` etc.) so the `prod` Snowflake target works with minimal changes.
 
@@ -95,11 +99,11 @@ Python extractors (incremental by date, retries, idempotent)
 ```bash
 uv sync
 uv run python -m extract.run                  # all sources, incremental
-cd dbt && uv run dbt deps && uv run dbt seed && uv run dbt snapshot
-uv run dbt source freshness && uv run dbt build
+cd dbt && uv run dbt deps
+uv run dbt source freshness && uv run dbt build   # build = seeds + models + snapshots + tests in DAG order
 uv run dbt docs generate && uv run dbt docs serve
 uv run streamlit run app/streamlit_app.py
-uv run ruff check . && uv run sqlfluff lint dbt/models --dialect duckdb
+make lint    # ruff + sqlfluff (dbt templater; needs dbt/profiles.yml, `dbt deps` and bronze data)
 uv run pytest
 ```
 A `Makefile` wraps these (`make extract`, `make dbt`, `make app`, `make lint`, `make test`).

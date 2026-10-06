@@ -1,0 +1,30 @@
+sources:
+  - name: entsoe
+    description: >
+      ENTSO-E Transparency Platform, CZ bidding zone (10YCZ-CEPS-----N), via entsoe-py
+      (`extract/entsoe.py`). 15-minute points, one partition per Prague delivery day.
+    config:
+      loaded_at_field: _loaded_at
+      freshness:
+        warn_after: {count: 36, period: hour}
+        error_after: {count: 72, period: hour}
+      meta:
+        # Bronze root is relative to dbt/; override with BRONZE_ROOT (e.g. absolute path).
+        external_location: >-
+          read_parquet('{{ env_var("BRONZE_ROOT", "../data/bronze") }}/{name}/*/*.parquet', hive_partitioning = true)
+    tables:
+      - name: entsoe_day_ahead_prices
+        description: Day-ahead (SDAC) prices, EUR/MWh, 15-minute resolution. Prices can be negative.
+        columns:
+          - name: ts_utc
+            data_tests: [not_null]
+          - name: value
+            description: Price in EUR/MWh.
+
+      - name: entsoe_actual_load
+        description: Actual total load, MW, 15-minute resolution.
+        columns:
+          - name: ts_utc
+            data_tests: [not_null]
+          - name: value
+            description: Load in MW.

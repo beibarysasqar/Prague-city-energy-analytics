@@ -24,6 +24,7 @@ dev = [
     "responses>=0.26.3",
     "ruff>=0.16.10",
     "sqlfluff>=4.4.0",
+    "sqlfluff-templater-dbt>=4.4.0",
 ]
 
 [tool.ruff]
