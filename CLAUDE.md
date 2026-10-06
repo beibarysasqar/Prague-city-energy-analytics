@@ -99,6 +99,8 @@ Python extractors (incremental by date, retries, idempotent)
 - Determinism: float `avg/sum` in DuckDB is not bit-for-bit reproducible (parallel order), which made incremental results differ from full refreshes → use the `stable_avg` / `stable_sum` macros (DECIMAL aggregation) for averages that feed incremental models or marts. Verified: incremental == full refresh for all facts and the mart.
 - Required tests: unique / not_null / relationships / accepted_values, plus custom generic tests in `dbt/tests/generic/`: `non_negative` (e.g. PM2.5; prices may be negative — do NOT apply to day-ahead price) and `no_time_gaps(partition_by, datepart)` (per station, hourly, on UTC) — error on energy/weather, **warn** on AQ (real source gaps, ~1.4k).
 - Prefer cross-database macros (`dbt_utils`, `dbt.date_trunc` etc.) so the `prod` Snowflake target works with minimal changes.
+- App (`app/`): `streamlit_app.py` (layout only) + `data.py` (read-only gold queries, pure transforms, unit-tested) + `charts.py` (Plotly builders) + `theme.py` (light/dark palette from the dataviz reference palette; red diverging arm lightness-matched in OKLCH). Reads `data/warehouse.duckdb` read-only (`DUCKDB_PATH` override, relative to `dbt/`).
+- App decisions: pollutant filter = PM10 (default, 13 stations) / NO₂ / PM2.5 (4 stations only) — the mart's pollutants; price vs pollution = two stacked charts on a shared time axis (never a dual axis); correlations = Pearson r of district-day means, ≥ 14 days, with a "correlation ≠ causation" note; bike growth = last 28 vs first 28 complete days (YoY needs ≥ 1 year of data) plus a per-counter growth table, because single counters dominate swings (e.g. Smetanovo nábřeží ×13 since mid-August).
 
 ## Commands
 ```bash
