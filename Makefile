@@ -20,9 +20,11 @@ extract:
 
 # `dbt build` runs seeds, models, snapshots and tests in DAG order (a separate `dbt snapshot`
 # before the build fails on a fresh database: the snapshot reads a staging model).
+# Source freshness is reported but does not block the build: one stale API must not stop the
+# refresh of every other source (the failure stays visible in the log / CI annotation).
 dbt: profiles
 	$(DBT) deps
-	$(DBT) source freshness
+	$(DBT) source freshness || echo "::warning::dbt source freshness failed - stale sources above; continuing with dbt build"
 	$(DBT) build
 
 debug: profiles
@@ -44,6 +46,7 @@ lint: profiles
 	uv run ruff check .
 	uv run ruff format --check .
 	$(SQLFLUFF) lint dbt/models dbt/tests
+	uv run --with actionlint-py actionlint .github/workflows/*.yml
 
 format: profiles
 	uv run ruff check --fix .

@@ -1,10 +1,13 @@
 [project]
 name = "prague-city-energy-analytics"
 version = "0.1.0"
+description = "ELT pipeline on Prague open data: air quality, electricity prices, weather and bike traffic (uv, DuckDB, dbt, Streamlit)."
 requires-python = ">=3.12"
 dependencies = [
+    "beautifulsoup4>=4.15.0",
     "dbt-core>=1.12.5",
     "dbt-duckdb>=1.11.0",
+    "duckdb>=1.5.6",
     "entsoe-py>=0.8.1",
     "pandas>=3.0.6",
     "plotly>=7.1.0",

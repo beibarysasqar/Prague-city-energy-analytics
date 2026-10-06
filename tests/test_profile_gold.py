@@ -54,3 +54,13 @@ def test_markdown_index_rows_and_links() -> None:
 @pytest.mark.parametrize("profiled, expected", [(10, False), (5, True)])
 def test_table_summary_sampled_flag(profiled: int, expected: bool) -> None:
     assert profile_gold.TableSummary("t", 10, profiled, 1, 0).sampled is expected
+
+
+def test_script_duckdb_pin_matches_project() -> None:
+    """The profiler reads the project's warehouse file, so both must use the same DuckDB version."""
+    import re
+
+    import duckdb
+
+    pin = re.search(r'"duckdb==([\d.]+)"', SCRIPT.read_text()).group(1)
+    assert pin == duckdb.__version__, "update the PEP 723 header in profiling/profile_gold.py"
