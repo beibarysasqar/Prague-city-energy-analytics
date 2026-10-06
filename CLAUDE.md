@@ -9,8 +9,8 @@ Author works on macOS in PyCharm. Communicate with me in Russian; code, comments
 2. Where is bicycle traffic growing?
 
 ## Status
-Phases 1–7 done (one branch per phase, stacked: `feat/phase-2-extractors` … `feat/phase-7-ci`; only phase 2 is
-pushed, `main` holds the scaffold). Next: phase 8 (README).
+All 8 phases done and merged into `main` via PRs (phase 2: #1, phases 3–7: #2, phase 8: README PR). PR CI is green on GitHub;
+repository secrets are set. Next: run `daily.yml` once manually to seed the data cache, then roadmap items (see README).
 
 ## Stack
 - Python 3.12, dependency management with **uv** (`uv add`, `uv run`; never use pip directly)
@@ -87,7 +87,7 @@ Python extractors (incremental by date, retries, idempotent)
 
 ## Conventions
 ### General
-- Repo layout: `extract/`, `dbt/` (dbt project `prague`), `app/`, `profiling/`, `orchestration/`, `.github/workflows/`, `tests/`, `data/` (gitignored; static reference data lives in `dbt/seeds/`).
+- Repo layout: `extract/`, `dbt/` (dbt project `prague`), `app/`, `profiling/`, `orchestration/`, `.github/workflows/`, `tests/`, `docs/images/` (README screenshots), `data/` (gitignored; static reference data lives in `dbt/seeds/`); `README.md`, `LICENSE` (MIT).
 - Logging via `logging`, no prints. Type hints everywhere. Small pure functions that are unit-testable with pytest (mock HTTP).
 - All timestamps stored in UTC (`*_ts_utc`); local Prague time only as derived column. This matters for DST and the gap test.
 - Direct imports must be declared dependencies (e.g. `duckdb`, `beautifulsoup4`), not rely on transitive ones.
@@ -142,7 +142,7 @@ table + `index.md` → `profiling/reports/`, not committed), `app`, `lint` (ruff
 5. ✅ **Profiling**: HTML/Markdown reports for gold tables in `profiling/reports/`.
 6. ✅ **Streamlit**: filters (period, district, pollutant), KPI cards, station map, price vs pollutant time series, pollutant vs wind scatter coloured by price, per-district correlations (with "correlation ≠ causation" note), bike traffic growth (rolling avg by district; YoY once a year of data exists).
 7. ✅ **CI**: `dbt_ci.yml` on every PR (sync → extract 7 days → dbt build → lint → pytest), secrets from GitHub Actions secrets; `daily.yml` cron; example Airflow DAG in `orchestration/`.
-8. **README**: Mermaid architecture diagram, lineage screenshot, dashboard screenshot, design decisions, how to run, roadmap.
+8. ✅ **README**: Mermaid architecture diagram, lineage screenshot, dashboard screenshot, design decisions, how to run, roadmap.
 
 ## How to work with me
 - Start each phase in plan mode: propose the plan and file list, wait for my OK, then implement.
