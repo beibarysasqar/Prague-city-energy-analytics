@@ -56,7 +56,9 @@ models:
         description: Concentration in µg/m³ (all components, incl. CO, per `/componenttypes`).
         data_tests: [not_null]
       - name: averaging_hours
-        description: Averaging window of the value (1 or 3 hours; fixed per station).
+        description: >
+          Averaging window of the value: 3-hour running averages until 2026-08-12 ~06:00 UTC, 1-hour
+          values after (source switch, together with the HH:10 -> HH:50 publication change).
         data_tests:
           - not_null
           - accepted_values:

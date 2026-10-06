@@ -35,6 +35,7 @@ Before writing an extractor, check the current official docs / try one request �
 - `GET /v2/airqualitystations` → GeoJSON FeatureCollection (17 stations, `coordinates=[lon, lat]`); reference list frozen at `updated_at` 2026-08-12.
 - `GET /v2/airqualitystations/history?from&to&limit&offset` → array `{id, updated_at, measurement{AQ_hourly_index, components[{type, averaged_time{averaged_hours, value}}]}}`; `from`/`to` filter on `updated_at`.
 - Real types differ from the docs: `AQ_hourly_index` (e.g. "1B") and `averaged_hours` are strings. All units µg/m³ (`/componenttypes`).
+- `averaged_hours` switched on 2026-08-12 ~06:00 UTC: before = 3-hour running averages (17 stations), after = 1-hour values (13 stations). Never filter on it blindly — it removes a whole period.
 - `updated_at` is the publication time (`HH:50` UTC since ~2026-08-12, `HH:10` before), not the measurement hour → derive the measured hour in silver. ~23 rows/station/day; some hours are missing.
 - Bronze: `golemio_air_quality_stations/` (snapshot, partition = run date UTC) and `golemio_air_quality_history/` (partition = UTC day of `updated_at`). Nested objects (`measurement`, `geometry`) are stored as JSON strings; parse them in silver.
 - Shared Golemio helpers (session, rate limiter, pagination, `to_raw_row`, `day_bounds`) live in `extract/golemio.py`.
@@ -75,13 +76,13 @@ Python extractors (incremental by date, retries, idempotent)
    → dbt silver: typing, UTC timestamps, dedup (qualify row_number), 15min→hourly, FX forward-fill
    → dbt snapshot: SCD2 of station dimension (strategy=check)
    → dbt gold (star schema):
-       fact_air_quality_hourly, fact_energy_price_hourly, fact_bike_traffic_daily,
-       dim_station, dim_district, dim_date, (mart_air_vs_energy_daily)
+       fact_air_quality_hourly, fact_weather_hourly, fact_energy_price_hourly, fact_bike_traffic_daily,
+       dim_station (SCD2), dim_district, dim_date, dim_bike_counter, mart_air_vs_energy_daily
    → Streamlit app + profiling reports
 ```
 
 ## Conventions
-- Repo layout: `extract/`, `dbt/` (dbt project `prague`), `app/`, `profiling/`, `orchestration/`, `.github/workflows/`, `data/` (gitignored except small seeds).
+- Repo layout: `extract/`, `dbt/` (dbt project `prague`), `app/`, `profiling/`, `orchestration/`, `.github/workflows/`, `data/` (gitignored; small static reference data lives in `dbt/seeds/`).
 - Extractors: one module per source, shared helpers in `extract/common.py`; state in `data/bronze/_state.json`; CLI `uv run python -m extract.run --source <name> --start YYYY-MM-DD --end YYYY-MM-DD` (default: incremental from state, 90 days on first run). Re-running the same date must overwrite, not duplicate.
 - Logging via `logging`, no prints. Type hints everywhere. Small pure functions that are unit-testable with pytest (mock HTTP).
 - All timestamps stored in UTC (`*_ts_utc`); local Prague time only as derived column. This matters for DST and the gap test.
@@ -90,9 +91,11 @@ Python extractors (incremental by date, retries, idempotent)
 - Sources read bronze Parquet via dbt-duckdb `external_location`; every source has `loaded_at_field: _loaded_at` and freshness thresholds.
 - Silver (`dbt/models/staging/<source>/`): staging models are materialized as **tables** (views would keep relative `read_parquet('../data/bronze/…')` paths and break outside `dbt/`). Bronze root defaults to `../data/bronze` (relative to `dbt/`), override with `BRONZE_ROOT`. The dev profile sets DuckDB `TimeZone: UTC` (date_trunc on TIMESTAMPTZ uses the session zone) and loads `json`, `spatial`.
 - Silver keys/decisions: AQ measurements = (station_id, measured_hour_start_ts_utc, pollutant), measured hour = hour ending at `date_trunc('hour', updated_at)` (assumption: published 10–50 min after the hour), latest re-publication wins; bicycle detections = (counter_id, direction_id, interval_start_ts_utc); counters → districts via `st_contains_geojson` macro (adapter.dispatch duckdb/snowflake); ENTSO-E 15 min → UTC hour averages with `n_intervals`; FX = calendar_date × currency, `rate_czk_per_unit = rate / amount`, `dbt_utils.date_spine` + forward-fill. JSON parsing/unnest in staging is DuckDB-specific (Snowflake would need FLATTEN).
-- Known source quirk: counter `camea-BC_PN-VYBR` (cycle path) has a `{"id": null}` direction in the catalogue but reports detections for `camea-PN-VY`/`camea-PN-BR` → complete the direction dimension in gold from observed detections.
+- Known source quirk: counter `camea-BC_PN-VYBR` (cycle path) has a `{"id": null}` direction in the catalogue but reports detections for `camea-PN-VY`/`camea-PN-BR` → silver drops the placeholder, `fact_bike_traffic_daily` takes the direction name from the sibling counter (`is_direction_inferred`).
 - SCD2: `snapshots/snap_golemio__air_quality_stations.yml` (YAML snapshot syntax, check strategy, `hard_deletes: invalidate`).
-- Required tests: unique / not_null / relationships / accepted_values, plus custom generic tests `non_negative` (e.g. PM2.5, prices may be negative! — do NOT apply to day-ahead price) and `no_time_gaps` (per station, hourly, on UTC).
+- Gold (`dbt/models/marts/`): `dim_date` (2025–2027, `date_key` YYYYMMDD, Czech holidays from seed `cz_public_holidays`), `dim_district` (+ `'-1'` Unknown member), `dim_station` (SCD2 versions; first version valid from 1900-01-01 because the snapshot started late; facts join on station_id + hour within [valid_from, valid_to)), `dim_bike_counter`; facts `fact_air_quality_hourly` (station × hour × pollutant), `fact_weather_hourly` (station × hour — added to the original list, needed for Q1), `fact_energy_price_hourly` (hour; CZK via ČNB EUR rate of the Prague date, latest rate as estimate for tomorrow), `fact_bike_traffic_daily` (counter × direction × Prague date, `is_complete_day`, DST-aware `expected_slots` 276/288/300); `mart_air_vs_energy_daily` (district × Prague date). Facts: incremental `delete+insert` with `incremental_lookback()` (var `incremental_lookback_days: 3`).
+- Determinism: float `avg/sum` in DuckDB is not bit-for-bit reproducible (parallel order), which made incremental results differ from full refreshes → use the `stable_avg` / `stable_sum` macros (DECIMAL aggregation) for averages that feed incremental models or marts. Verified: incremental == full refresh for all facts and the mart.
+- Required tests: unique / not_null / relationships / accepted_values, plus custom generic tests in `dbt/tests/generic/`: `non_negative` (e.g. PM2.5; prices may be negative — do NOT apply to day-ahead price) and `no_time_gaps(partition_by, datepart)` (per station, hourly, on UTC) — error on energy/weather, **warn** on AQ (real source gaps, ~1.4k).
 - Prefer cross-database macros (`dbt_utils`, `dbt.date_trunc` etc.) so the `prod` Snowflake target works with minimal changes.
 
 ## Commands

@@ -1,0 +1,12 @@
+seeds:
+  - name: cz_public_holidays
+    description: Czech public holidays 2025–2027 (Easter-based dates precomputed). Used by `dim_date`.
+    config:
+      column_types:
+        holiday_date: date
+        holiday_name: varchar
+    columns:
+      - name: holiday_date
+        data_tests: [unique, not_null]
+      - name: holiday_name
+        data_tests: [not_null]

@@ -21,7 +21,8 @@ hourly as (
 
     select
         {{ dbt.date_trunc('hour', 'interval_start_ts_utc') }} as hour_start_ts_utc,
-        avg(price_eur_mwh) as price_eur_mwh,
+        -- exact DECIMAL average: plain avg() on DOUBLE is not bit-for-bit deterministic
+        {{ stable_avg('price_eur_mwh') }} as price_eur_mwh,
         min(price_eur_mwh) as min_price_eur_mwh,
         max(price_eur_mwh) as max_price_eur_mwh,
         count(*) as n_intervals,

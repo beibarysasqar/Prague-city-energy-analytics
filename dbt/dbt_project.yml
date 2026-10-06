@@ -13,6 +13,10 @@ clean-targets:
   - target
   - dbt_packages
 
+vars:
+  # Lookback window (days) re-processed by incremental facts for late-arriving data.
+  incremental_lookback_days: 3
+
 models:
   prague:
     staging:

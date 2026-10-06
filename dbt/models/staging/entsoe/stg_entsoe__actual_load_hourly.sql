@@ -21,7 +21,7 @@ hourly as (
 
     select
         {{ dbt.date_trunc('hour', 'interval_start_ts_utc') }} as hour_start_ts_utc,
-        avg(load_mw) as load_mw,
+        {{ stable_avg('load_mw') }} as load_mw,
         count(*) as n_intervals,
         max(loaded_at_ts_utc) as loaded_at_ts_utc
     from quarter_hours
