@@ -85,7 +85,7 @@ Python extractors (incremental by date, retries, idempotent)
 
 ## Conventions
 - Repo layout: `extract/`, `dbt/` (dbt project `prague`), `app/`, `profiling/`, `orchestration/`, `.github/workflows/`, `data/` (gitignored; small static reference data lives in `dbt/seeds/`).
-- Extractors: one module per source, shared helpers in `extract/common.py`; state in `data/bronze/_state.json`; CLI `uv run python -m extract.run --source <name> --start YYYY-MM-DD --end YYYY-MM-DD` (default: incremental from state, 90 days on first run). Re-running the same date must overwrite, not duplicate.
+- Extractors: one module per source, shared helpers in `extract/common.py`; state in `data/bronze/_state.json`; CLI `uv run python -m extract.run --source <name> [--start YYYY-MM-DD | --days N] [--end YYYY-MM-DD]` (default: incremental from state, 90 days on first run). Re-running the same date must overwrite, not duplicate.
 - Logging via `logging`, no prints. Type hints everywhere. Small pure functions that are unit-testable with pytest (mock HTTP).
 - All timestamps stored in UTC (`*_ts_utc`); local Prague time only as derived column. This matters for DST and the gap test.
 - dbt naming: `stg_<source>__<entity>` (silver), `dim_*`, `fact_*`, `mart_*` (gold). Every model has a YAML entry with description and tests.
@@ -100,12 +100,15 @@ Python extractors (incremental by date, retries, idempotent)
 - Required tests: unique / not_null / relationships / accepted_values, plus custom generic tests in `dbt/tests/generic/`: `non_negative` (e.g. PM2.5; prices may be negative — do NOT apply to day-ahead price) and `no_time_gaps(partition_by, datepart)` (per station, hourly, on UTC) — error on energy/weather, **warn** on AQ (real source gaps, ~1.4k).
 - Prefer cross-database macros (`dbt_utils`, `dbt.date_trunc` etc.) so the `prod` Snowflake target works with minimal changes.
 - App (`app/`): `streamlit_app.py` (layout only) + `data.py` (read-only gold queries, pure transforms, unit-tested) + `charts.py` (Plotly builders) + `theme.py` (light/dark palette from the dataviz reference palette; red diverging arm lightness-matched in OKLCH). Reads `data/warehouse.duckdb` read-only (`DUCKDB_PATH` override, relative to `dbt/`).
+- CI (`.github/workflows/`): `dbt_ci.yml` on every PR — `uv sync --locked` → `extract.run --days 7` → `make dbt` → `make lint` → `make test`, dbt artifacts uploaded; `daily.yml` cron 13:30 UTC — restores `data/` (bronze, `_state.json`, warehouse incl. SCD2 snapshot) from the Actions cache, incremental extract → `make dbt` → `make profile`, saves the cache, uploads reports + warehouse. Repository secrets needed: `GOLEMIO_API_KEY`, `ENTSOE_API_KEY` (Settings → Secrets and variables → Actions). Workflows are checked with `uv run --with actionlint-py actionlint`.
+- Airflow: `orchestration/airflow/dags/prague_city_energy.py` is an example Airflow 3 DAG (one task per source, dbt deps → freshness → build, profiling); parsed with Airflow 3.3.2 but never run — Airflow is not a project dependency.
 - App decisions: pollutant filter = PM10 (default, 13 stations) / NO₂ / PM2.5 (4 stations only) — the mart's pollutants; price vs pollution = two stacked charts on a shared time axis (never a dual axis); correlations = Pearson r of district-day means, ≥ 14 days, with a "correlation ≠ causation" note; bike growth = last 28 vs first 28 complete days (YoY needs ≥ 1 year of data) plus a per-counter growth table, because single counters dominate swings (e.g. Smetanovo nábřeží ×13 since mid-August).
 
 ## Commands
 ```bash
 uv sync
 uv run python -m extract.run                  # all sources, incremental
+uv run python -m extract.run --days 7         # last 7 days regardless of state (CI)
 cd dbt && uv run dbt deps
 uv run dbt source freshness && uv run dbt build   # build = seeds + models + snapshots + tests in DAG order
 uv run dbt docs generate && uv run dbt docs serve
