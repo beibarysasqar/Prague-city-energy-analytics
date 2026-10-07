@@ -124,6 +124,20 @@ def test_load_stations_from_latest_snapshot(tmp_path: Path) -> None:
     assert load_stations(tmp_path) == STATIONS  # sorted by id
 
 
+def test_load_stations_keeps_removed_stations_with_latest_coordinates(tmp_path: Path) -> None:
+    def snapshot(day: date, stations: list[Station]) -> None:
+        rows = [
+            {"id": s.station_id, "geometry": json.dumps({"coordinates": [s.longitude, s.latitude]})}
+            for s in stations
+        ]
+        write_bronze(rows, STATIONS_SOURCE, day, bronze_dir=tmp_path)
+
+    moved = Station("ABREA", 50.1, 14.4)
+    snapshot(date(2026, 10, 4), STATIONS)  # both stations listed
+    snapshot(date(2026, 10, 5), [moved])  # ACHOA removed from the list, ABREA moved
+    assert load_stations(tmp_path) == [moved, STATIONS[1]]
+
+
 def test_load_stations_without_snapshot(tmp_path: Path) -> None:
     with pytest.raises(MissingStationsError, match="golemio_air_quality"):
         load_stations(tmp_path)
@@ -157,6 +171,28 @@ def test_run_writes_day_partitions_idempotently(tmp_path: Path) -> None:
     assert len(df) == 96
     assert not df.duplicated(["station_id", "time"]).any()
     assert get_last_loaded(SOURCE, state) == date(2026, 10, 3)
+
+
+@responses.activate
+def test_run_clamps_future_end_to_today(tmp_path: Path) -> None:
+    write_station_snapshot(tmp_path)
+    responses.get(
+        BASE_URL,
+        json=load_fixture("archive_2_stations_2_days.json"),
+        match=[
+            matchers.query_param_matcher(
+                build_params(STATIONS, date(2026, 10, 2), date(2026, 10, 3))
+            )
+        ],
+    )
+    run(
+        date(2026, 10, 2),
+        date(2026, 10, 9),
+        bronze_dir=tmp_path,
+        state_path=tmp_path / "_state.json",
+        today=date(2026, 10, 3),
+    )
+    assert len(responses.calls) == 1  # requested up to today, not the future end
 
 
 @responses.activate

@@ -1,29 +1,61 @@
 models:
   - name: stg_golemio__air_quality_stations
     description: >
-      Current air quality station list (latest bronze snapshot). Source of the SCD2 snapshot
-      `snap_golemio__air_quality_stations`. Four stations (AHOLA, ALERA, ARERA, ASROA) are listed but
-      stopped publishing measurements on 2026-08-12.
+      Every air quality station ever listed by the source (latest version from all bronze
+      snapshots). Source of the SCD2 snapshot `snap_golemio__air_quality_stations`. Stations removed
+      from the list (e.g. ALEGA on 2026-10-06) stay with `is_listed = false`; four stations (AHOLA,
+      ALERA, ARERA, ASROA) are listed but stopped publishing measurements on 2026-08-12.
     columns:
       - name: station_id
         description: ČHMÚ station code.
         data_tests: [unique, not_null]
       - name: station_name
-        data_tests: [not_null]
+        data_tests:
+          - not_null:
+              config:
+                where: "not is_inferred"
       - name: district_slug
         description: City district slug, joins to `stg_golemio__city_districts`.
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                where: "not is_inferred"
           - relationships:
               arguments:
                 to: ref('stg_golemio__city_districts')
                 field: district_slug
       - name: latitude
-        data_tests: [not_null]
+        data_tests:
+          - not_null:
+              config:
+                where: "not is_inferred"
       - name: longitude
+        data_tests:
+          - not_null:
+              config:
+                where: "not is_inferred"
+      - name: first_seen_date
+        description: First snapshot (UTC run date) the record appeared in.
+        data_tests:
+          - not_null:
+              config:
+                where: "not is_inferred"
+      - name: last_listed_date
+        description: Latest snapshot the record was listed in.
+        data_tests:
+          - not_null:
+              config:
+                where: "not is_inferred"
+      - name: is_inferred
+        description: >
+          True for members inferred from the facts (seen in the history, never in a loaded
+          snapshot); their attributes are unknown.
         data_tests: [not_null]
-      - name: snapshot_date
-        description: Bronze partition (UTC run date) the row comes from.
+      - name: is_listed
+        description: >
+          True if the record is in the latest snapshot. Records the source removes stay here with
+          false, so the history that references them keeps a parent.
+        data_tests: [not_null]
 
   - name: stg_golemio__air_quality_measurements
     description: >
@@ -52,6 +84,8 @@ models:
           - accepted_values:
               arguments:
                 values: [CO, NO2, NOx, O3, O3_Model, PM10, PM2_5, SO2]
+              config:
+                severity: warn
       - name: value_ugm3
         description: Concentration in µg/m³ (all components, incl. CO, per `/componenttypes`).
         data_tests: [not_null]
@@ -65,19 +99,25 @@ models:
               arguments:
                 values: [1, 3]
                 quote: false
+              config:
+                severity: warn
       - name: aq_hourly_index
         description: ČHMÚ hourly air quality index code (0 = incomplete data, -1 = not determined).
         data_tests:
           - accepted_values:
               arguments:
                 values: ["-1", "0", 1A, 1B, 2A, 2B, 3A, 3B]
+              config:
+                severity: warn
       - name: measured_hour_start_local
         description: Start of the measured hour in Europe/Prague local time (derived, naive timestamp).
       - name: published_ts_utc
         data_tests: [not_null]
 
   - name: stg_golemio__city_districts
-    description: Prague city districts (latest bronze snapshot) with boundary polygons as GeoJSON.
+    description: >
+      Every Prague city district ever listed (latest version from all bronze snapshots) with its
+      boundary polygon as GeoJSON.
     columns:
       - name: district_id
         data_tests: [unique, not_null]
@@ -88,27 +128,72 @@ models:
       - name: geometry_geojson
         description: GeoJSON Polygon of the district boundary.
         data_tests: [not_null]
+      - name: first_seen_date
+        description: First snapshot (UTC run date) the record appeared in.
+        data_tests: [not_null]
+      - name: last_listed_date
+        description: Latest snapshot the record was listed in.
+        data_tests: [not_null]
+      - name: is_listed
+        description: >
+          True if the record is in the latest snapshot. Records the source removes stay here with
+          false, so the history that references them keeps a parent.
+        data_tests: [not_null]
 
   - name: stg_golemio__bicycle_counters
     description: >
-      Bicycle counters (latest bronze snapshot). The API has no district for counters; `district_slug`
-      is derived by point-in-polygon against the district boundaries (`st_contains_geojson` macro).
+      Every bicycle counter ever listed (latest version from all bronze snapshots; removed counters
+      stay with `is_listed = false`). The API has no district for counters; `district_slug` is derived
+      by point-in-polygon against the district boundaries (`st_contains_geojson` macro).
     columns:
       - name: counter_id
         data_tests: [unique, not_null]
-      - name: counter_name
+      - name: first_seen_date
+        description: First snapshot (UTC run date) the record appeared in.
+        data_tests:
+          - not_null:
+              config:
+                where: "not is_inferred"
+      - name: last_listed_date
+        description: Latest snapshot the record was listed in.
+        data_tests:
+          - not_null:
+              config:
+                where: "not is_inferred"
+      - name: is_inferred
+        description: >
+          True for members inferred from the facts (seen in the history, never in a loaded
+          snapshot); their attributes are unknown.
         data_tests: [not_null]
+      - name: is_listed
+        description: >
+          True if the record is in the latest snapshot. Records the source removes stay here with
+          false, so the history that references them keeps a parent.
+        data_tests: [not_null]
+      - name: counter_name
+        data_tests:
+          - not_null:
+              config:
+                where: "not is_inferred"
       - name: district_slug
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                where: "not is_inferred"
           - relationships:
               arguments:
                 to: ref('stg_golemio__city_districts')
                 field: district_slug
       - name: latitude
-        data_tests: [not_null]
+        data_tests:
+          - not_null:
+              config:
+                where: "not is_inferred"
       - name: longitude
-        data_tests: [not_null]
+        data_tests:
+          - not_null:
+              config:
+                where: "not is_inferred"
 
   - name: stg_golemio__bicycle_counter_directions
     description: >
@@ -162,8 +247,12 @@ models:
           - dbt_utils.accepted_range:
               arguments:
                 min_value: 0
+              config:
+                severity: warn
       - name: pedestrian_count
         data_tests:
           - dbt_utils.accepted_range:
               arguments:
                 min_value: 0
+              config:
+                severity: warn

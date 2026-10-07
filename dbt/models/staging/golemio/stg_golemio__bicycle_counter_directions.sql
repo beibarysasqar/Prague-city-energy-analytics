@@ -4,11 +4,15 @@ with source as (
 
 ),
 
-latest_snapshot as (
+-- Latest version of every record ever listed. Records the source removes from its list stay in the
+-- reference with is_listed = false, so their history (measurements, detections) keeps a parent.
+latest_version as (
 
-    select *
+    select
+        *,
+        load_date = max(load_date) over () as is_listed
     from source
-    qualify load_date = max(load_date) over ()
+    qualify row_number() over (partition by id order by load_date desc) = 1
 
 ),
 
@@ -17,7 +21,7 @@ directions as (
     select
         id as counter_id,
         unnest(json_extract(directions, '$[*]')) as direction
-    from latest_snapshot
+    from latest_version
 
 ),
 

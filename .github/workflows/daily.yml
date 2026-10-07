@@ -71,3 +71,28 @@ jobs:
             data/warehouse.duckdb
           if-no-files-found: ignore
           retention-days: 7
+
+  # GitHub disables scheduled workflows after 60 days without repository activity (public repos).
+  # If nothing was committed for 45 days, an empty bot commit keeps the schedule alive. Independent
+  # of the pipeline job, so the schedule survives pipeline failures too.
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Commit if the repository has been idle for 45 days
+        env:
+          IDLE_DAYS_LIMIT: 45
+        run: |
+          last_commit=$(git log -1 --format=%ct)
+          idle_days=$(( ($(date +%s) - last_commit) / 86400 ))
+          echo "Last commit ${idle_days} days ago (limit ${IDLE_DAYS_LIMIT})"
+          if [ "$idle_days" -ge "$IDLE_DAYS_LIMIT" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "chore: keepalive (no commits for ${idle_days} days)"
+            git push
+          fi

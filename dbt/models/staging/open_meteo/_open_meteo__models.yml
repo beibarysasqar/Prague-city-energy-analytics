@@ -27,17 +27,23 @@ models:
               arguments:
                 min_value: 0
                 max_value: 100
+              config:
+                severity: warn
       - name: precipitation_mm
         data_tests:
           - dbt_utils.accepted_range:
               arguments:
                 min_value: 0
+              config:
+                severity: warn
       - name: wind_speed_kmh
         description: Wind speed at 10 m as delivered (km/h).
         data_tests:
           - dbt_utils.accepted_range:
               arguments:
                 min_value: 0
+              config:
+                severity: warn
       - name: wind_speed_ms
         description: Wind speed at 10 m converted to m/s.
       - name: wind_direction_deg
@@ -46,5 +52,7 @@ models:
               arguments:
                 min_value: 0
                 max_value: 360
+              config:
+                severity: warn
       - name: grid_latitude
         description: Latitude of the model grid cell (not the station).

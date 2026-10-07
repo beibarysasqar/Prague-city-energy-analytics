@@ -9,8 +9,9 @@ Author works on macOS in PyCharm. Communicate with me in Russian; code, comments
 2. Where is bicycle traffic growing?
 
 ## Status
-All 8 phases done and merged into `main` via PRs (phase 2: #1, phases 3–7: #2, phase 8: README PR). PR CI is green on GitHub;
-repository secrets are set. Next: run `daily.yml` once manually to seed the data cache, then roadmap items (see README).
+All 8 phases done and merged into `main` via PRs. The daily run is fully automatic (cron + data cache + keepalive);
+the first scheduled run exposed reference-data removals (station ALEGA, 2026-10-06) → fixed by keeping removed records
+(`is_listed`). Next: roadmap items (see README).
 
 ## Stack
 - Python 3.12, dependency management with **uv** (`uv add`, `uv run`; never use pip directly)
@@ -71,7 +72,7 @@ Before writing an extractor, check the current official docs / try one request �
 - `GET /v1/archive?latitude=a,b,…&longitude=a,b,…&start_date&end_date&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m&timezone=UTC`. Several coordinates → a **list** in request order with no location id (station id matched by position); one coordinate → a single object. We chunk by 31 days.
 - Per location: `latitude/longitude/elevation` of the **model grid cell** (differs from the requested point), `hourly_units` (°C, %, mm, **km/h**, °), `hourly.time` = `YYYY-MM-DDTHH:MM` in UTC. Errors → HTTP 400 `{"error": true, "reason": ...}`.
 - Recent days (incl. today) come from model/forecast data and get revised → incremental runs re-load the last 3 days.
-- Bronze: `open_meteo_weather_hourly/`, partition = UTC day, one row per station × hour; weather variables forced to float64. Requires the `golemio_air_quality_stations` snapshot (run Golemio first).
+- Bronze: `open_meteo_weather_hourly/`, partition = UTC day, one row per station × hour; weather variables forced to float64. Coordinates of every station ever seen in the `golemio_air_quality_stations` snapshots (run Golemio first), so re-loads keep the weather of removed stations. The archive rejects future dates (HTTP 400) → `end` is clamped to today (UTC).
 
 ## Architecture
 ```
@@ -101,11 +102,13 @@ Python extractors (incremental by date, retries, idempotent)
 - Sources read bronze Parquet via dbt-duckdb `external_location` (bronze root `../data/bronze` relative to `dbt/`, override `BRONZE_ROOT`); every source has `loaded_at_field: _loaded_at` and freshness thresholds. `make dbt` reports stale sources but still builds (one stale API must not block the others).
 - Silver is materialized as **tables** (views would keep relative `read_parquet()` paths and break outside `dbt/`). The dev profile sets DuckDB `TimeZone: UTC` (date_trunc on TIMESTAMPTZ uses the session zone) and loads `json`, `spatial`.
 - Silver keys/decisions: AQ measurements = (station_id, measured_hour_start_ts_utc, pollutant), measured hour = hour ending at `date_trunc('hour', updated_at)` (assumption: published 10–50 min after the hour), latest re-publication wins; bicycle detections = (counter_id, direction_id, interval_start_ts_utc), the null catalogue direction is dropped; counters → districts via the `st_contains_geojson` macro (adapter.dispatch duckdb/snowflake); ENTSO-E 15 min → UTC hour averages with `n_intervals`; FX = calendar_date × currency, `rate_czk_per_unit = rate / amount`, `dbt_utils.date_spine` + forward-fill. JSON parsing/unnest in staging is DuckDB-specific (Snowflake would need FLATTEN).
-- SCD2: `snapshots/snap_golemio__air_quality_stations.yml` (YAML snapshot syntax, check strategy, `hard_deletes: invalidate`).
-- Gold: `dim_date` (2025–2027, `date_key` YYYYMMDD, Czech holidays from seed `cz_public_holidays`), `dim_district` (+ `'-1'` Unknown member), `dim_station` (SCD2 versions; first version valid from 1900-01-01 because the snapshot started late; facts join on station_id + hour within [valid_from, valid_to)), `dim_bike_counter`; `fact_air_quality_hourly` (station × hour × pollutant), `fact_weather_hourly` (station × hour — added to the original list, needed for Q1), `fact_energy_price_hourly` (hour; CZK via the ČNB EUR rate of the Prague date, latest rate as estimate for tomorrow), `fact_bike_traffic_daily` (counter × direction × Prague date, `is_complete_day`, DST-aware `expected_slots` 276/288/300, `is_direction_inferred` for the cycle-path counter); `mart_air_vs_energy_daily` (district × Prague date).
+- Reference data never disappears: stations, counters (+ directions) and districts are built from **all** bronze snapshots (latest version per record) with `first_seen_date`, `last_listed_date`, `is_listed`. Building them from the latest snapshot only broke `relationships` tests the day the source removed station ALEGA. Records that appear in the facts but in no loaded snapshot (e.g. a fresh 7-day CI load after a removal) are added as **inferred members** (`is_inferred = true`, attributes null; attribute tests use `where: not is_inferred`); `assert_no_inferred_reference_members` warns while they exist.
+- SCD2: `snapshots/snap_golemio__air_quality_stations.yml` (YAML snapshot syntax, check strategy incl. `is_listed`, so a removal is a new version). `dim_station` merges consecutive identical snapshot rows (e.g. after adding a column) and chains versions without gaps.
+- Gold: `dim_date` (2025-01-01 → end of the year after next, rolling; `date_key` YYYYMMDD, Czech holidays from seed `cz_public_holidays`), `dim_district` (+ `'-1'` Unknown member), `dim_station` (SCD2 versions; first version valid from 1900-01-01 because the snapshot started late; facts join on station_id + hour within [valid_from, valid_to)), `dim_bike_counter`; `fact_air_quality_hourly` (station × hour × pollutant), `fact_weather_hourly` (station × hour — added to the original list, needed for Q1), `fact_energy_price_hourly` (hour; CZK via the ČNB EUR rate of the Prague date, latest rate as estimate for tomorrow), `fact_bike_traffic_daily` (counter × direction × Prague date, `is_complete_day`, DST-aware `expected_slots` 276/288/300, `is_direction_inferred` for the cycle-path counter); `mart_air_vs_energy_daily` (district × Prague date).
 - Gold facts are `incremental`, `incremental_strategy='delete+insert'`, with a 3-day lookback (`incremental_lookback()`, var `incremental_lookback_days`).
 - Determinism: float `avg/sum` in DuckDB is not bit-for-bit reproducible (parallel order) → use `stable_avg` / `stable_sum` (DECIMAL aggregation) for aggregates that feed incremental models or marts. Verified: incremental == full refresh.
-- Required tests: unique / not_null / relationships / accepted_values, plus custom generic tests in `dbt/tests/generic/`: `non_negative` (e.g. PM2.5; prices may be negative — never on day-ahead price) and `no_time_gaps(partition_by, datepart)` (per station, hourly, on UTC) — error on energy/weather, **warn** on AQ (real source gaps, ~1.4k).
+- Required tests: unique / not_null / relationships / accepted_values, plus custom generic tests in `dbt/tests/generic/`: `non_negative` (e.g. PM2.5; prices may be negative — never on day-ahead price) and `no_time_gaps(partition_by, datepart)` (per station, hourly, on UTC).
+- Test severity: **error** = contract of our model (keys, not_null, relationships, our computations such as `expected_slots`, `n_intervals`, EUR rate every day); **warn** = source drift (new categories in `accepted_values`, out-of-range or negative source values, time gaps — `non_negative` and `no_time_gaps` warn by default). A changing world must not stop the daily load; a broken model must. `assert_holiday_seed_covers_next_year` warns a year before the holiday seed runs out.
 - Prefer cross-database macros (`dbt_utils`, `dbt.date_trunc`, `extract(...)`) so the `prod` Snowflake target works with minimal changes.
 
 ### App (`app/`)
@@ -116,6 +119,7 @@ Python extractors (incremental by date, retries, idempotent)
 - `.github/workflows/dbt_ci.yml` on every PR: `uv sync --locked` → `extract.run --days 7` → `make dbt` → `make lint` → `make test`, dbt artifacts uploaded.
 - `.github/workflows/daily.yml` cron 13:30 UTC: restores `data/` (bronze, `_state.json`, warehouse incl. SCD2 snapshot) from the Actions cache → incremental extract → `make dbt` → `make profile` → saves the cache, uploads reports + warehouse.
 - Repository secrets: `GOLEMIO_API_KEY`, `ENTSOE_API_KEY` (Settings → Secrets and variables → Actions).
+- Keepalive: GitHub disables scheduled workflows after 60 days without repository activity; the `keepalive` job in `daily.yml` makes an empty bot commit when nothing was committed for 45 days. Failed scheduled runs are e-mailed by GitHub.
 - `orchestration/airflow/dags/prague_city_energy.py`: example Airflow 3 DAG (one task per source, dbt deps → freshness → build, profiling); parsed with Airflow 3.3.2, never run — Airflow is not a project dependency.
 - `profiling/profile_gold.py` pins the same DuckDB version as the project (a test enforces it): it reads the project's warehouse file.
 

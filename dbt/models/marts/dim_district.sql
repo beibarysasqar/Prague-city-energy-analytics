@@ -11,7 +11,8 @@ known as (
         district_id,
         district_slug,
         district_name,
-        geometry_geojson
+        geometry_geojson,
+        is_listed
     from districts
 
 ),
@@ -24,7 +25,8 @@ unknown as (
         cast(null as integer) as district_id,
         'unknown' as district_slug,
         'Unknown' as district_name,
-        cast(null as varchar) as geometry_geojson
+        cast(null as varchar) as geometry_geojson,
+        true as is_listed
 
 )
 
