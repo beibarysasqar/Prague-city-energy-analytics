@@ -108,7 +108,7 @@ def load_station_pollution(start: date, end: date, pollutant: str) -> pd.DataFra
             stats.mean_ugm3, stats.max_ugm3, coalesce(stats.n_hours, 0) as n_hours
         from gold.dim_station as s
         left join stats on s.station_id = stats.station_id
-        where s.is_current
+        where s.is_current and s.latitude is not null  -- inferred stations have no location
         order by s.station_name
         """,
         [pollutant, start, end],

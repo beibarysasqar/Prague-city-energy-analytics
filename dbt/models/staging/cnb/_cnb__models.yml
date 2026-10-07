@@ -26,6 +26,8 @@ models:
               arguments:
                 min_value: 0
                 inclusive: false
+              config:
+                severity: warn
       - name: quoted_amount
         description: Units the original rate was quoted for (1, 100, 1000).
       - name: is_forward_filled

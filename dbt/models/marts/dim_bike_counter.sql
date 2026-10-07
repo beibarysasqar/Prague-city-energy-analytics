@@ -24,6 +24,8 @@ final as (
         counters.district_slug,
         counters.latitude,
         counters.longitude,
+        counters.is_listed,
+        counters.is_inferred,
         counters.source_updated_ts_utc
     from counters
     left join districts on counters.district_slug = districts.district_slug

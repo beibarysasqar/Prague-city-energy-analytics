@@ -67,7 +67,7 @@ flowchart LR
 | `dim_station` (SCD2), `dim_district`, `dim_bike_counter`, `dim_date` (Czech holidays) | dimensions |
 | `mart_air_vs_energy_daily` | district × Prague calendar day — pollution, weather, price, load |
 
-19 models, 9 sources, 1 snapshot, 1 seed, **171 dbt tests** (keys, relationships, accepted values, ranges and the
+19 models, 9 sources, 1 snapshot, 1 seed, **189 dbt tests** (keys, relationships, accepted values, ranges and the
 custom generic tests `non_negative` and `no_time_gaps`).
 
 ![dbt lineage](docs/images/lineage.png)
@@ -109,10 +109,15 @@ Filters (period, districts, pollutant) scope the whole page; every chart has a t
   measured hour and keeps the latest re-publication.
 - **SCD2 that works for history.** The station snapshot started after the data; the first version of each station is
   therefore valid from 1900-01-01, and facts look up the version valid at their hour.
+- **Reference data never disappears.** Stations, counters and districts are built from all snapshots; a record the
+  source removes stays with `is_listed = false`, and the SCD2 snapshot records the removal as a new version; records
+  seen in the facts but in no loaded snapshot become inferred members. (Learned in production: the first scheduled
+  run failed when Golemio removed station ALEGA from its list.)
 - **Incremental = full refresh, bit for bit.** DuckDB's parallel float aggregation is not reproducible, so averages
   feeding incremental models are computed in DECIMAL (`stable_avg`); verified by comparing content hashes.
-- **Tests that match reality.** `no_time_gaps` fails the build on energy and weather (no gaps) but only warns on air
-  quality, where the source has real outages; `non_negative` is never applied to prices (they can be negative).
+- **Contract vs drift tests.** Tests on our model (keys, relationships, our computations) fail the build; tests on
+  what the source sends (new categories, out-of-range values, time gaps) warn — a changing world must not stop the
+  daily load, a broken model must. `non_negative` is never applied to prices (they can be negative).
 - **Freshness informs, does not block.** `dbt source freshness` is reported, but one stale API does not stop the
   refresh of all other sources.
 - **Portable SQL.** Cross-database macros (`dbt.date_trunc`, `dbt_utils`, `adapter.dispatch` for spatial and time-zone
@@ -130,6 +135,8 @@ Filters (period, districts, pollutant) scope the whole page; every chart has a t
 | Golemio bike counters | Direction ids shared by two counters; a `null` direction in the catalogue | Natural key incl. counter id; direction names inferred and flagged |
 | ENTSO-E | Day-ahead prices sent as two identical series | De-duplicated before hourly aggregation |
 | ČNB | Future dates silently return the latest rates | Extraction window clamped to today |
+| Golemio air quality | Stations removed from the list (ALEGA on 2026-10-06) while their history remains | Kept with `is_listed = false`; SCD2 records the removal |
+| Open-Meteo | Future end dates rejected (HTTP 400) | Window clamped to today (UTC) |
 | ČNB ARAD | No daily official EUR/CZK fixing | Public ČNB FX API used instead |
 
 ## How to run
@@ -159,7 +166,8 @@ specific window. For CI, add `GOLEMIO_API_KEY` and `ENTSOE_API_KEY` as repositor
 
 - **`dbt_ci.yml`** (every pull request): `uv sync --locked` → extract the last 7 days → `dbt build` → lint → pytest.
 - **`daily.yml`** (13:30 UTC): restores `data/` from the Actions cache, runs an incremental extract, `dbt build` and
-  profiling, then saves the cache and uploads the reports and the warehouse as artifacts.
+  profiling, then saves the cache and uploads the reports and the warehouse as artifacts. A `keepalive` job makes an
+  empty commit after 45 idle days, so GitHub never disables the schedule (it does after 60 days without activity).
 - **Airflow**: [`orchestration/`](orchestration/) contains an example Airflow 3 DAG of the same pipeline
   (documented, validated by parsing, not deployed).
 
@@ -180,7 +188,7 @@ docs/images/        README screenshots
 
 - **pytest**: 117 tests — extractors against recorded API fixtures with mocked HTTP (retries, pagination,
   idempotency, secret handling), dashboard transforms and chart rules, an end-to-end Streamlit smoke test.
-- **dbt**: 171 tests in every `dbt build`; incremental results verified against full refreshes.
+- **dbt**: 189 tests in every `dbt build`; incremental results verified against full refreshes.
 - **Lint**: ruff, sqlfluff (dbt templater), actionlint — all run in CI.
 
 ## Roadmap

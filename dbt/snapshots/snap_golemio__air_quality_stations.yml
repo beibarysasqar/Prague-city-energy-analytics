@@ -1,15 +1,15 @@
 snapshots:
   - name: snap_golemio__air_quality_stations
     description: >
-      SCD2 history of the air quality station dimension (check strategy on name, district and
-      coordinates). `dbt_valid_from`/`dbt_valid_to` bound each version; stations that disappear from the
-      source are closed (`hard_deletes: invalidate`).
+      SCD2 history of the air quality station dimension (check strategy on name, district,
+      coordinates and `is_listed`). `dbt_valid_from`/`dbt_valid_to` bound each version. Stations the
+      source removes from its list stay in the staging model with `is_listed = false`, so a removal
+      becomes a new version instead of a deleted row.
     relation: ref('stg_golemio__air_quality_stations')
     config:
       unique_key: station_id
       strategy: check
-      check_cols: [station_name, district_slug, latitude, longitude]
-      hard_deletes: invalidate
+      check_cols: [station_name, district_slug, latitude, longitude, is_listed]
     columns:
       - name: station_id
         data_tests: [not_null]

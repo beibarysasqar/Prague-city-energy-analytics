@@ -147,13 +147,21 @@ def split_by_day(rows: Sequence[dict[str, Any]]) -> dict[date, list[dict[str, An
 
 
 def load_stations(bronze_dir: Path = BRONZE_DIR) -> list[Station]:
-    """Coordinates from the latest Golemio stations snapshot in bronze."""
+    """Every station ever seen in the Golemio snapshots, with its latest coordinates.
+
+    Stations the source removes from its list keep their weather history: re-loading recent days
+    must not drop the weather of a station that was still measuring on those days.
+    """
     snapshots = sorted((bronze_dir / STATIONS_SOURCE).glob("load_date=*/part.parquet"))
     if not snapshots:
         raise MissingStationsError(
             f"No {STATIONS_SOURCE} snapshot in bronze; run --source golemio_air_quality first"
         )
-    return stations_from_snapshot(pd.read_parquet(snapshots[-1], columns=["id", "geometry"]))
+    frames = [pd.read_parquet(path, columns=["id", "geometry"]) for path in snapshots]
+    latest = pd.concat(frames).drop_duplicates(
+        subset="id", keep="last"
+    )  # snapshots are date-sorted
+    return stations_from_snapshot(latest)
 
 
 def fetch_chunk(
@@ -177,6 +185,10 @@ def run(
 ) -> None:
     """Load hourly weather per UTC day for all stations (default: incremental + lookback)."""
     today = today or utc_today()
+    if end is not None and end > today:
+        # The archive rejects future dates (HTTP 400), e.g. a local Prague date after 22:00 UTC.
+        logger.warning("End %s is in the future; clamping to %s", end, today)
+        end = today
     stations = load_stations(bronze_dir)
     start, end = resolve_window(
         SOURCE, start, end, today=today, lookback_days=LOOKBACK_DAYS, state_path=state_path

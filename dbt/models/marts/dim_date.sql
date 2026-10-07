@@ -1,9 +1,10 @@
 with spine as (
 
+    {#- fixed start (before the first data), end rolls forward: through the year after next -#}
     {{ dbt_utils.date_spine(
         datepart='day',
         start_date="cast('2025-01-01' as date)",
-        end_date="cast('2028-01-01' as date)"
+        end_date="cast(" ~ dbt.dateadd('year', 2, dbt.date_trunc('year', 'current_date')) ~ " as date)"
     ) }}
 
 ),

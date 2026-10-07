@@ -23,12 +23,17 @@ models:
         data_tests: [unique, not_null]
       - name: district_name
         data_tests: [not_null]
+      - name: is_listed
+        description: False once the source removed the record from its list.
+        data_tests: [not_null]
 
   - name: dim_station
     description: >
       SCD2 air quality station dimension built from `snap_golemio__air_quality_stations`, one row per
       station version. The first version of every station is valid from 1900-01-01 (the snapshot only
-      started recently); open versions end at 9999-12-31. Facts look up the version valid at their hour.
+      started recently); each version ends where the next starts, the open one at 9999-12-31; snapshot
+      rows with identical attributes are merged. A removal from the source list is a new version with
+      `is_listed = false`. Facts look up the version valid at their hour.
     columns:
       - name: station_key
         description: Version key (`dbt_scd_id`).
@@ -48,6 +53,12 @@ models:
         data_tests: [not_null]
       - name: is_current
         data_tests: [not_null]
+      - name: is_listed
+        description: False once the source removed the record from its list.
+        data_tests: [not_null]
+      - name: is_inferred
+        description: Member inferred from the facts; attributes unknown.
+        data_tests: [not_null]
 
   - name: dim_bike_counter
     description: Bicycle counters with the district derived by point-in-polygon.
@@ -63,6 +74,12 @@ models:
               arguments:
                 to: ref('dim_district')
                 field: district_key
+      - name: is_listed
+        description: False once the source removed the record from its list.
+        data_tests: [not_null]
+      - name: is_inferred
+        description: Member inferred from the facts; attributes unknown.
+        data_tests: [not_null]
 
   # ------------------------------------------------------------------ facts
   - name: fact_air_quality_hourly
@@ -83,13 +100,13 @@ models:
               arguments:
                 partition_by: [station_id]
                 datepart: hour
-              config:
-                severity: warn
       - name: pollutant
         data_tests:
           - accepted_values:
               arguments:
                 values: [CO, NO2, NOx, O3, O3_Model, PM10, PM2_5, SO2]
+              config:
+                severity: warn
       - name: station_key
         description: Station version valid at the measured hour (SCD2 lookup).
         data_tests:
@@ -272,3 +289,5 @@ models:
               arguments:
                 values: [1, 3]
                 quote: false
+              config:
+                severity: warn
