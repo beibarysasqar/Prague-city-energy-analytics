@@ -186,7 +186,7 @@ docs/images/        README screenshots
 
 ## Testing and quality
 
-- **pytest**: 117 tests — extractors against recorded API fixtures with mocked HTTP (retries, pagination,
+- **pytest**: 119 tests — extractors against recorded API fixtures with mocked HTTP (retries, pagination,
   idempotency, secret handling), dashboard transforms and chart rules, an end-to-end Streamlit smoke test.
 - **dbt**: 189 tests in every `dbt build`; incremental results verified against full refreshes.
 - **Lint**: ruff, sqlfluff (dbt templater), actionlint — all run in CI.
